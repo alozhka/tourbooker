@@ -1,0 +1,38 @@
+@startuml Components diagram (Worker)
+
+!include style.puml
+
+title TourBooker — C3. Компоненты контейнера Worker
+
+LAYOUT_TOP_DOWN()
+
+ContainerQueue(broker, "Брокер событий", "RabbitMQ", "Оплата, бронирование, возвраты и запросы отчётов", $sprite="rabbitmq,scale=0.5")
+
+Container_Boundary(worker, "Worker · .NET / MassTransit v8") {
+ Component(outbox, "Доставка outbox", "MassTransit / EF Core", "Публикует сохранённые события каждого модуля", $sprite="cogs,scale=0.5")
+ Component(booking, "Booking · обработчики событий", "C# / MassTransit", "Подтверждает оплаченную бронь; формирует отчёты; запрашивает возврат при отказе", $sprite="dotnet,scale=0.5")
+ Component(expiry, "Booking · истечение брони", ".NET BackgroundService", "Выбирает просроченные резервы и освобождает места", $sprite="dotnet,scale=0.5")
+ Component(payments, "Payments · возвраты", "C# / MassTransit", "Обрабатывает запрос возврата и вызывает провайдера идемпотентно", $sprite="dotnet,scale=0.5")
+ Component(notifications, "Notifications", "C# / MassTransit", "Email туристам и туроператорам по событиям бронирования и оплаты", $sprite="envelope,scale=0.5")
+}
+
+ContainerDb(db, "Основная БД", "PostgreSQL", "Схемы модулей, outbox и inbox", $sprite="postgresql,scale=0.5")
+
+System_Ext(payment, "Платёжный провайдер", "Возвраты денежных средств", $sprite="credit_card,scale=0.5")
+System_Ext(email, "Email-провайдер", "Доставка писем", $sprite="envelope,scale=0.5")
+
+Rel(outbox, db, "Читает outbox и отмечает доставку", "EF Core")
+Rel(outbox, broker, "Публикует события", "AMQP", $tags="event")
+Rel(broker, booking, "PaymentSucceeded, ReportRequested", "AMQP", $tags="event")
+Rel(broker, payments, "RefundRequested", "AMQP", $tags="event")
+Rel(broker, notifications, "События бронирования и оплаты", "AMQP", $tags="event")
+Rel(booking, db, "Статусы, отчёты, inbox и новые события outbox", "EF Core")
+Rel(expiry, db, "Освобождает места; сохраняет событие в outbox", "EF Core")
+Rel(payments, db, "Возвраты, inbox и outbox", "EF Core")
+Rel(notifications, db, "Статусы отправки и inbox", "EF Core")
+Rel(payments, payment, "Запрашивает возврат", "REST / HTTPS")
+Rel(notifications, email, "Передаёт письмо для доставки", "REST / HTTPS")
+
+SHOW_LEGEND()
+
+@enduml

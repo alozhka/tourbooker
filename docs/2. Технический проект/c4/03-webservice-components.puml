@@ -1,0 +1,42 @@
+@startuml Components diagram (Web Service)
+
+!include style.puml
+
+title TourBooker — C3. Модули контейнера WebService
+
+LAYOUT_TOP_DOWN()
+
+Container(nginx, "Входной прокси", "Nginx", "Запросы браузера и платёжные вебхуки", $sprite="nginx,scale=0.5")
+Container(frontend, "Веб-приложение", "Next.js", "Читает каталог при SSR", $sprite="react,scale=0.5")
+System_Ext(provider, "Платёжный провайдер", "Синхронное создание платёжных сессий", $sprite="credit_card,scale=0.5")
+
+Container_Boundary(api, "WebService · ASP.NET Core") {
+ Component(http, "HTTP API и контроль доступа", "ASP.NET Core", "Эндпоинты модулей; аутентификация, роли и проверка владельца", $sprite="cogs,scale=0.5")
+ Component(auth, "Auth", "C# / Clean Architecture", "Профили, учётные записи, роли и проверка туроператоров", $sprite="dotnet,scale=0.5")
+ Component(catalog, "Catalog", "C# / Clean Architecture", "Туры, заезды, цены, поиск, отзывы и модерация", $sprite="dotnet,scale=0.5")
+ Component(booking, "Booking", "C# / Clean Architecture", "Вместимость, резервы на 30 минут, брони, отмены; запрос отчёта", $sprite="dotnet,scale=0.5")
+ Component(payments, "Payments", "C# / Clean Architecture", "Попытки оплаты, платёжные сессии, идемпотентные вебхуки", $sprite="dotnet,scale=0.5")
+}
+
+ContainerDb(db, "Основная БД", "PostgreSQL", "Схемы модулей; бизнес-данные и outbox", $sprite="postgresql,scale=0.5")
+ContainerDb(cache, "Кэш каталога", "Redis", "Карточки и справочные данные", $sprite="redis,scale=0.5")
+
+Rel(nginx, http, "/api/*", "REST / HTTP")
+Rel(frontend, http, "Публичные данные для SSR", "REST / HTTP")
+Rel(http, auth, "Учётные записи и проверка доступа", "Вызов метода")
+Rel(http, catalog, "Каталог, отзывы и модерация", "Вызов метода")
+Rel(http, booking, "Брони, места и отчёты", "Вызов метода")
+Rel(http, payments, "Оплата и вебхуки", "Вызов метода")
+Rel(payments, booking, "Проверяет бронь и получает сумму оплаты", "Booking.Contracts")
+Rel(booking, catalog, "Получает параметры заезда и цену", "Catalog.Contracts")
+Rel(catalog, booking, "Читает доступность; проверяет право на отзыв", "Booking.Contracts")
+Rel(auth, db, "Учётные записи", "EF Core")
+Rel(catalog, db, "Туры и отзывы", "EF Core")
+Rel(booking, db, "Брони, места и outbox одной транзакцией", "EF Core")
+Rel(payments, db, "Платежи, дедупликация вебхуков и outbox", "EF Core")
+Rel(catalog, cache, "Читает и инвалидирует", "RESP")
+Rel(payments, provider, "Создаёт сессию оплаты", "REST / HTTPS")
+
+SHOW_LEGEND()
+
+@enduml

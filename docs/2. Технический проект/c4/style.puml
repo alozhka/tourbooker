@@ -1,0 +1,25 @@
+!include <C4/C4_Component>
+!pragma layout smetana
+
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam wrapWidth 210
+skinparam nodesep 45
+skinparam ranksep 65
+skinparam ArrowFontSize 11
+skinparam titleFontSize 22
+
+!include <logos/postgresql>
+!include <logos/redis>
+!include <logos/nginx>
+!include <logos/react>
+!include <logos/dotnet>
+!include <cloudinsight/rabbitmq>
+!include <tupadr3/font-awesome/envelope>
+!include <tupadr3/font-awesome/credit_card>
+!include <tupadr3/font-awesome/globe>
+!include <tupadr3/font-awesome/cogs>
+AddElementTag("transient", $bgColor="#E5EDF5", $fontColor="#24364B", $borderColor="#627D98", $legendText="Служебный процесс при развёртывании")
+AddRelTag("event", $lineColor="#A35B16", $textColor="#82460E", $lineStyle=DashedLine(), $legendText="Асинхронные сообщения")

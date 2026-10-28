@@ -1,0 +1,33 @@
+@startuml Context diagram
+
+!include style.puml
+
+title TourBooker — C1. Контекст
+
+LAYOUT_TOP_DOWN()
+
+Boundary(users, "Пользователи") {
+  Person(tourist, "Турист", "Ищет туры, бронирует и оплачивает поездки; оставляет отзывы")
+  Person(operator, "Туроператор", "Управляет своими турами, местами и бронированиями")
+  Person(admin, "Администратор", "Проверяет операторов, модерирует контент и управляет платформой")
+}
+
+Lay_R(admin, operator)
+Lay_R(operator, tourist)
+
+System(tourbooker, "TourBooker", "Поиск и бронирование туров; управление предложениями, оплатой и уведомлениями", $sprite="globe,scale=0.5")
+System_Ext(payment, "Платёжный провайдер", "Обрабатывает данные карт, платежи и возвраты", $sprite="credit_card,scale=0.5")
+System_Ext(email, "Email-провайдер", "Доставляет письма о бронировании и оплате", $sprite="envelope,scale=0.5")
+Rel(tourist, tourbooker, "Ищет, бронирует, оплачивает; читает статусы и оставляет отзывы")
+Rel(operator, tourbooker, "Публикует туры; управляет местами; получает отчёты")
+Rel(admin, tourbooker, "Модерирует, управляет аккаунтами и финансовыми операциями")
+Rel(tourbooker, payment, "Создаёт платёжные сессии и запрашивает возвраты")
+Rel(payment, tourbooker, "Сообщает результаты оплаты и возвратов")
+Rel(tourist, payment, "Оплачивает на странице провайдера")
+Rel(tourbooker, email, "Передаёт письма для доставки")
+Rel(email, tourist, "Доставляет уведомления о бронировании и оплате")
+Rel(email, operator, "Доставляет уведомления о бронированиях его туров")
+
+SHOW_LEGEND()
+
+@enduml

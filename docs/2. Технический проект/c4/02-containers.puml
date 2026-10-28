@@ -1,0 +1,56 @@
+@startuml Containers diagram
+
+!include style.puml
+
+title TourBooker — C2. Контейнеры
+
+LAYOUT_TOP_DOWN()
+
+Boundary(users, "Пользователи") {
+  Person(tourist, "Турист", "Ищет и бронирует туры; оплачивает поездки и оставляет отзывы")
+  Person(operator, "Туроператор", "Управляет своими турами, местами и бронированиями; получает отчёты")
+  Person(admin, "Администратор", "Проверяет операторов, модерирует контент и управляет платформой")
+}
+
+Lay_R(admin, operator)
+Lay_R(operator, tourist)
+System_Ext(payment, "Платёжный провайдер", "Платёжная страница, платежи и возвраты", $sprite="credit_card,scale=0.5")
+System_Ext(email, "Email-провайдер", "Доставка уведомлений", $sprite="envelope,scale=0.5")
+
+System_Boundary(system, "TourBooker") {
+ Container(nginx, "Входной прокси", "Nginx", "TLS; /api/* → WebService; остальные пути → Next.js", $sprite="nginx,scale=0.5")
+ Container(frontend, "Веб-приложение", "Next.js / React / Node.js", "SSR и SSG публичных страниц; общий UI и клиентский JS для трёх ролей", $sprite="react,scale=0.5")
+ Container(api, "WebService", "C# 14 / .NET 10 / ASP.NET Core", "HTTP API модулей; проверка доступа; приём платёжных вебхуков", $sprite="dotnet,scale=0.5")
+ Container(worker, "Worker", "C# / .NET 10 / MassTransit v8", "Outbox, consumers, истечение брони, отчёты, возвраты и email", $sprite="dotnet,scale=0.5")
+ Container(migrator, "Migrator", ".NET 10 / EF Core", "Отдельный исполняемый проект и DLL; миграции при развёртывании", $sprite="dotnet,scale=0.5", $tags="transient")
+
+ Boundary(infrastructure, "Внутренняя инфраструктура") {
+  ContainerDb(db, "Основная БД", "PostgreSQL", "Схемы auth, catalog, booking, payments, notifications; outbox/inbox модулей", $sprite="postgresql,scale=0.5")
+  ContainerDb(cache, "Кэш", "Redis", "Карточки туров и данные каталога; не источник истины о местах", $sprite="redis,scale=0.5")
+  ContainerQueue(broker, "Брокер событий", "RabbitMQ", "Интеграционные события, повторная доставка и очереди ошибок", $sprite="rabbitmq,scale=0.5")
+ }
+}
+
+Rel(tourist, nginx, "Поиск, брони, статусы и отзывы; UI и /api", "HTTPS")
+Rel(operator, nginx, "Туры, места, бронирования и отчёты; UI и /api", "HTTPS")
+Rel(admin, nginx, "Модерация, аккаунты и финансовые операции; UI и /api", "HTTPS")
+Rel(nginx, frontend, "Все пути, кроме /api/*", "HTTP")
+Rel(nginx, api, "/api/*: API и вебхуки", "REST / HTTP")
+Rel(frontend, api, "Читает публичные данные для SSR", "REST / HTTP")
+Rel(api, db, "Читает и пишет данные + outbox; только схемы владельцев", "EF Core")
+Rel(api, cache, "Читает, обновляет и инвалидирует кэш", "RESP")
+Rel(worker, db, "Данные модулей, outbox и inbox", "EF Core")
+Rel(migrator, db, "Применяет миграции схем модулей", "EF Core")
+Rel(worker, broker, "Публикует outbox; подписывается на очереди событий", "AMQP", $tags="event")
+Rel(broker, worker, "Доставляет события обработчикам", "AMQP", $tags="event")
+Rel(api, payment, "Синхронно создаёт платёжную сессию", "REST / HTTPS")
+Rel(worker, payment, "Запрашивает возвраты", "REST / HTTPS")
+Rel(payment, nginx, "Результаты оплаты и возврата: /api/payments/webhooks", "HTTPS")
+Rel(tourist, payment, "Оплачивает на сайте провайдера", "HTTPS")
+Rel(worker, email, "Передаёт письма туристам и туроператорам", "REST / HTTPS")
+Rel(email, tourist, "Доставляет уведомления о бронировании и оплате", "Email")
+Rel(email, operator, "Доставляет уведомления о бронированиях его туров", "Email")
+
+SHOW_LEGEND()
+
+@enduml
