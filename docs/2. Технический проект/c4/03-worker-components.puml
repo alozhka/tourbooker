@@ -1,0 +1,118 @@
+@startuml Components diagram (Worker)
+
+!pragma layout smetana
+allowmixing
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam nodesep 35
+skinparam ranksep 55
+skinparam ArrowFontSize 11
+skinparam classBackgroundColor #E8F1FA
+skinparam classBorderColor #2E6295
+skinparam interfaceBackgroundColor #FFF4D6
+hide empty members
+
+title TourBooker — Worker: основные классы и интерфейсы
+caption Проектируемая структура · .NET / MassTransit v8 · показаны операции Worker
+
+queue "Брокер событий\nRabbitMQ" as broker
+
+package "TourBooker.Worker" as worker {
+  package "Booking" {
+    class PaymentSucceededConsumer <<Consumer>> {
+      + Consume(PaymentSucceeded)
+    }
+    class BookingExpiryWorker <<BackgroundService>> {
+      + Execute(cancellationToken)
+    }
+    class BookingService <<application service>> {
+      + ConfirmPayment(bookingId, paymentId)
+      + ExpireReservations(now)
+    }
+    class ReportRequestedConsumer <<Consumer>> {
+      + Consume(ReportRequested)
+    }
+    class BookingReportService <<application service>> {
+      + Generate(reportId)
+    }
+    PaymentSucceededConsumer --> BookingService : подтверждает оплаченную бронь
+    BookingExpiryWorker --> BookingService : освобождает просроченные резервы
+    ReportRequestedConsumer --> BookingReportService : формирует отчёт
+  }
+
+  package "Payments" {
+    class RefundRequestedConsumer <<Consumer>> {
+      + Consume(RefundRequested)
+    }
+    class PaymentService <<application service>> {
+      + Refund(paymentId, refundId)
+    }
+    interface IPaymentProvider {
+      + Refund(transactionId, amount, idempotencyKey)
+    }
+    package "ApiGateways · примеры адаптеров" {
+      class YooKassaPaymentProvider <<adapter>>
+      class CloudPaymentsPaymentProvider <<adapter>>
+    }
+    RefundRequestedConsumer --> PaymentService : инициирует возврат
+    PaymentService --> IPaymentProvider : запрашивает возврат\nс постоянным ключом идемпотентности
+    YooKassaPaymentProvider .up.|> IPaymentProvider : реализует
+    CloudPaymentsPaymentProvider .up.|> IPaymentProvider : реализует
+  }
+
+  package "Notifications" {
+    class BookingNotificationConsumer <<Consumer>> {
+      + Consume(bookingOrPaymentEvent)
+    }
+    class NotificationService <<application service>> {
+      + Notify(event)
+    }
+    interface IEmailProvider {
+      + Send(message)
+    }
+    class EmailProviderAdapter <<adapter>>
+    BookingNotificationConsumer --> NotificationService : готовит уведомление по событию
+    NotificationService --> IEmailProvider : передаёт письмо для отправки
+    EmailProviderAdapter .up.|> IEmailProvider : реализует
+  }
+
+  class "BusOutboxDeliveryService<TDbContext>" as outbox <<MassTransit infrastructure>>
+}
+
+database "PostgreSQL\nСхемы модулей; inbox / outbox" as db
+rectangle "ЮKassa\nПлатёжный провайдер (пример)" as yooKassa <<external system>>
+rectangle "CloudPayments\nПлатёжный провайдер (пример)" as cloudPayments <<external system>>
+rectangle "Email-провайдер\nКонкретный провайдер не выбран" as email <<external system>>
+
+broker -[#A35B16,dashed]-> PaymentSucceededConsumer : PaymentSucceeded [AMQP]
+broker -[#A35B16,dashed]-> ReportRequestedConsumer : ReportRequested [AMQP]
+broker -[#A35B16,dashed]-> RefundRequestedConsumer : RefundRequested [AMQP]
+broker -[#A35B16,dashed]-> BookingNotificationConsumer : события бронирования\nи оплаты [AMQP]
+
+BookingService -down-> db : booking:\nбронь, резервы;\nRefundRequested при истёкшей брони [SQL]
+BookingReportService -down-> db : booking:\nданные бронирований и отчёты [SQL]
+PaymentService -down-> db : payments:\nпопытка возврата, статус [SQL]
+NotificationService -down-> db : notifications:\nстатус отправки [SQL]
+outbox -down-> db : сообщения каждого модуля:\nчитает сообщения, отмечает доставку [SQL]
+outbox -[#A35B16,dashed]-> broker : публикует сохранённые события [AMQP]
+
+YooKassaPaymentProvider -down-> yooKassa : возврат [REST / HTTPS]
+CloudPaymentsPaymentProvider -down-> cloudPayments : возврат [REST / HTTPS]
+EmailProviderAdapter -down-> email : доставка письма [REST / HTTPS]
+
+legend bottom left
+  |= Обозначение |= Значение |
+  | Сплошная стрелка | Вызов операции / доступ к хранилищу |
+  | Пунктир с полым треугольником | Реализация интерфейса |
+  | Коричневый пунктир | Асинхронное сообщение |
+  | Пакет | Граница модуля внутри Worker |
+  Каждый модуль работает только со своей схемой БД.
+  Бизнес-изменения и outbox сохраняются в одной транзакции модуля.
+  Вебхуки и создание платёжной сессии находятся в WebService.
+endlegend
+
+@enduml
